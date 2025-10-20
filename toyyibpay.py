@@ -12,9 +12,9 @@ TOYYIBPAY_CATEGORY_CODE = os.getenv("TOYYIBPAY_CATEGORY_CODE")
 
 # --- IMPORTANT: Update these placeholders ---
 # This should be your Vercel app's URL. Toyyibpay will send payment status updates here.
-APP_BASE_URL = os.getenv("VERCEL_URL", "https://your-app-name.vercel.app") 
+APP_BASE_URL = os.getenv("VERCEL_URL") 
 # Your telegram bot username
-TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "YourBotUsername")
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME")
 
 def create_bill(user_telegram_id: int, user_name: str, user_email: str, amount: float) -> dict:
     """

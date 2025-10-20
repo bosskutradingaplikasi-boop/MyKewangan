@@ -34,6 +34,7 @@ class User(Base):
     status = Column(String(10), default='free') # free or premium
     subscription_start = Column(DateTime, nullable=True)
     subscription_end = Column(DateTime, nullable=True)
+    auto_laporan = Column(String(3), default='off') # on or off
 
 def init_db():
     Base.metadata.create_all(bind=engine)

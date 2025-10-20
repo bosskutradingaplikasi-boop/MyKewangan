@@ -94,6 +94,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/laporan [harian|mingguan|bulanan]\n"
         "/baki\n"
         "/padam [ID]\n"
+        "/kategori\n"
         "/backup - (Premium) Eksport data ke CSV."
     )
     target_message = update.callback_query.message if update.callback_query else update.message
@@ -187,6 +188,48 @@ async def upgrade_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         logger.error(f"Toyyibpay error for user {user.id}: {result.get('error')}")
         await update.message.reply_text("Maaf, kami tidak dapat menjana pautan bayaran pada masa ini.")
 
+async def kategori_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    with next(db.get_db()) as conn:
+        kategori = db.get_kategori(conn, user_id)
+    
+    if kategori:
+        message = "<b>📊 Senarai Kategori Anda:</b>\n"
+        message += "\n".join([f"- {k[0].capitalize()}" for k in kategori])
+    else:
+        message = "Tiada kategori direkodkan lagi."
+        
+    await update.message.reply_html(message)
+
+async def padam_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    try:
+        transaction_id = int(context.args[0])
+        with next(db.get_db()) as conn:
+            deleted_trans = db.delete_transaction(conn, user_id, transaction_id)
+        
+        if deleted_trans:
+            await update.message.reply_text(f"🗑️ Transaksi {transaction_id} telah dipadam.")
+        else:
+            await update.message.reply_text("Transaksi tidak dijumpai atau anda tidak mempunyai kebenaran untuk memadamnya.")
+            
+    except (IndexError, ValueError):
+        await update.message.reply_text("Format salah. Sila guna: /padam [ID Transaksi]")
+    except Exception as e:
+        logger.error(f"Error in padam_command: {e}")
+        await update.message.reply_text("Maaf, berlaku ralat semasa memadam transaksi.")
+
+async def laporan_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    period = context.args[0].lower() if context.args else 'harian'
+    
+    if period not in ['harian', 'mingguan', 'bulanan']:
+        await update.message.reply_text("Tempoh tidak sah. Sila guna: harian, mingguan, atau bulanan.")
+        return
+        
+    report_text = laporan.generate_report_text(user_id, period)
+    await update.message.reply_html(report_text)
+
 @premium_only
 async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
@@ -207,12 +250,26 @@ async def backup_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     file_bytes.name = f"mykewangan_backup_{datetime.now().strftime('%Y%m%d')}.csv"
     await update.message.reply_document(document=file_bytes)
 
+async def baki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    with next(db.get_db()) as conn:
+        balance = db.get_balance(conn, user_id)
+    
+    target_message = update.callback_query.message if update.callback_query else update.message
+    await target_message.reply_html(f"<b>Baki Semasa Anda:</b> RM{balance:.2f}")
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     if query.data.startswith('undo_'):
-        # ... (undo logic)
-        pass
+        transaction_id = int(query.data.split('_')[1])
+        user_id = update.effective_user.id
+        with next(db.get_db()) as conn:
+            deleted_trans = db.delete_transaction(conn, user_id, transaction_id)
+        if deleted_trans:
+            await query.edit_message_text(f"✅ Transaksi {transaction_id} telah dibatalkan.")
+        else:
+            await query.edit_message_text("Gagal membatalkan transaksi. Mungkin ia telah pun dipadamkan.")
     elif query.data == 'rekod_belanja_menu':
         await query.message.reply_html("Format: <code>/belanja [jumlah] [nota]</code>")
     elif query.data == 'rekod_masuk_menu':
@@ -220,7 +277,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif query.data == 'laporan_menu':
         await query.message.reply_text("Sila pilih: /laporan harian, /laporan mingguan, atau /laporan bulanan.")
     elif query.data == 'baki_menu':
-        await baki(update, context) # Assuming baki is defined
+        await baki(update, context)
     elif query.data == 'help_menu':
         await help_command(update, context)
 
@@ -275,7 +332,11 @@ async def startup():
     application.add_handler(CommandHandler("belanja", belanja))
     application.add_handler(CommandHandler("masuk", masuk))
     application.add_handler(CommandHandler("backup", backup_command))
-    # ... add other old handlers like laporan, baki, padam, kategori
+    application.add_handler(CommandHandler("laporan", laporan_command))
+    application.add_handler(CommandHandler("padam", padam_command))
+    application.add_handler(CommandHandler("kategori", kategori_command))
+    application.add_handler(CommandHandler("baki", baki))
+    
     application.add_handler(CallbackQueryHandler(button_handler))
 
     webhook_url = f"https://{VERCEL_URL}/telegram"
