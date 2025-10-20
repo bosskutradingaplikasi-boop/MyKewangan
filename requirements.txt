@@ -1,0 +1,7 @@
+python-telegram-bot==20.6
+SQLAlchemy==2.0.21
+apscheduler==3.10.4
+python-dotenv==1.0.0
+requests
+uvicorn
+starlette
